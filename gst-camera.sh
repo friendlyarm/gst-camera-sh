@@ -110,7 +110,7 @@ GSTC="gst-launch-1.0 rkisp ${rkargs} io-mode=4 path-iqf=${iqf} \
         ! ${vsnk}"
 
 if [ "x$action" == "xphoto" ]; then
-    GSTC="gst-launch-1.0 rkisp num-buffers=1 ${rkargs_picture} io-mode=4 path-iqf=${iqf} \
+    GSTC="gst-launch-1.0 rkisp num-buffers=1 ${rkargs_picture} io-mode=1 path-iqf=${iqf} \
         ! video/x-raw,format=NV12,${mode} \
         ! jpegenc ! filesink location=${output}"
 fi
@@ -118,8 +118,8 @@ fi
 if [ "x$action" == "xvideo" ]; then
     GSTC="gst-launch-1.0 rkisp num-buffers=512 ${rkargs} io-mode=4 path-iqf=${iqf} \
         ! video/x-raw,format=NV12,${mode} \
-	! tee name=t t. ! queue ! ${vsnk} t. \
-	! queue ! mpph264enc ! queue ! h264parse ! mpegtsmux \
+        ! tee name=t t. ! queue ! ${vsnk} t. \
+        ! queue ! mpph264enc ! queue ! h264parse ! mpegtsmux \
         ! filesink location=${output}"
 fi
 
