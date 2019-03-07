@@ -21,11 +21,21 @@
 # base setup
 
 icam=0
-mode="width=1280,height=720,framerate=30/1"
+preview_mode="width=1280,height=720,framerate=30/1"
+picture_mode="width=1280,height=720,framerate=10/1"
+video_mode="width=1920,height=1080,framerate=30/1"
 vsnk="kmssink"
 action="preview"
 output="IMG_MIPI.jpg"
 verbose="no"
+
+sname=$(cut -d" " -f1 /sys/class/video4linux/v4l-subdev${icam}/name)
+iqf="/etc/cam_iq/${sname}.xml"
+if [ x"$sname" = x"rk-ov13850" ]; then
+	picture_mode="width=2112,height=1568,framerate=10/1"
+elif [ x"$sname" = x"rk-ov4689" ]; then
+	picture_mode="width=2668,height=1520,framerate=10/1"
+fi
 
 if [ -f /usr/bin/lxsession ]; then
 	# for FriendlyDesktop
@@ -40,7 +50,6 @@ usage()
 	echo "Options:"
 	echo -e "  -h, --help\n\tshow this help message and exit"
 	echo -e "  -i, --index <0|1>\n\tcamera index,  0 or 1"
-	echo -e "  -m, --mode width=WIDTH,height=HEIGHT,framerate=FPS/1\n\tset camera resolution and framerate"
 	echo -e "  -a, --action <preview|photo|video>\n\tpreview, take photo or record video"
 	echo -e "  -o, --output <filename>\n\toutput file name"
 	echo -e "  -v, --verbose\n\tshow full command"
@@ -51,14 +60,13 @@ usage()
 
 parse_args()
 {
-	TEMP=`getopt -o "i:m:a:o:v:xkh" --long "index:,mode:,action:,output:,verbose:,help" -n "$SELF" -- "$@"`
+	TEMP=`getopt -o "i:a:o:v:xkh" --long "index:,action:,output:,verbose:,help" -n "$SELF" -- "$@"`
 	if [ $? != 0 ] ; then exit 1; fi
 	eval set -- "$TEMP"
 
 	while true; do
 		case "$1" in
 			-i|--index ) icam=$2; shift 2;;
-			-m|--mode ) mode=$2; shift 2;;
 			-a|--action) action=$2; shift 2;;
 			-o|--output) output=$2; shift 2;;
 			-v|--verbose) verbose=$2; shift 2;;
@@ -79,21 +87,18 @@ if [ $icam -eq 0 ]; then
 	preview_dev="/dev/video0"
 	picture_dev="/dev/video2"
 	rkargs="device=${preview_dev} sensor-id=1"
-	rkargs_picture="device=${picture_dev} sensor-id=1"
+	rkargs_mainpath="device=${picture_dev} sensor-id=1"
 else
 	preview_dev="/dev/video4"
 	picture_dev="/dev/video6"
 	rkargs="device=${preview_dev} sensor-id=5"
-	rkargs_picture="device=${picture_dev} sensor-id=5"
+	rkargs_mainpath="device=${picture_dev} sensor-id=5"
 fi
 
 if [ ! -d /sys/class/video4linux/v4l-subdev${icam} ]; then
 	echo "Error: Camera ${icam} not found"
 	exit -1
 fi
-
-sname=$(cut -d" " -f1 /sys/class/video4linux/v4l-subdev${icam}/name)
-iqf="/etc/cam_iq/${sname}.xml"
 
 if [ -c ${preview_dev} ]; then
 	echo "Start MIPI CSI Camera Preview [${preview_dev}] ..."
@@ -105,33 +110,77 @@ fi
 #----------------------------------------------------------
 export DISPLAY=:0.0
 
-GSTC="gst-launch-1.0 rkisp ${rkargs} io-mode=4 path-iqf=${iqf} \
-        ! video/x-raw,format=NV12,${mode} \
-        ! ${vsnk}"
+killall gst-launch-1.0 2>&1 > /dev/null
+sleep 1
+
+function start_preview() {
+	local CMD="gst-launch-1.0 rkisp ${rkargs} io-mode=4 path-iqf=${iqf} \
+		! video/x-raw,format=NV12,${preview_mode} \
+		! ${vsnk}"
+	if [ "x${verbose}" == "xyes" ]; then
+                echo "===================================================="
+                echo "=== GStreamer 1.1 command:"
+                echo "=== $(echo $CMD | sed -e 's/\r//g')"
+                echo "===================================================="
+        fi
+	if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+                eval "${CMD}"&
+        else
+                su pi -c "${CMD}"&
+        fi
+	sleep 2
+}
+
+function take_photo() {
+	local CMD="gst-launch-1.0 rkisp num-buffers=20 ${rkargs_mainpath} io-mode=1 path-iqf=${iqf} \
+        	! video/x-raw,format=NV12,${picture_mode} \
+        	! jpegenc ! multifilesink location=\"/tmp/isp-frame%d.jpg\""
+        if [ "x${verbose}" == "xyes" ]; then
+                echo "===================================================="
+                echo "=== GStreamer 1.1 command:"
+                echo "=== $(echo $CMD | sed -e 's/\r//g')"
+                echo "===================================================="
+        fi
+	echo "{{{{{{ start take photo"
+        if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+                eval "${CMD}"
+        else
+                su pi -c "${CMD}"
+        fi
+	echo "}}}}}} end take photo"
+	if [ -f /tmp/isp-frame19.jpg ]; then
+		cp /tmp/isp-frame19.jpg ${output}
+	fi
+}
+
+function start_video_recording() {
+	local CMD="gst-launch-1.0 rkisp num-buffers=512 ${rkargs_mainpath} io-mode=1 path-iqf=${iqf} \
+        	! video/x-raw,format=NV12,${video_mode} \
+        	! mpph264enc ! queue ! h264parse ! mpegtsmux \
+        	! filesink location=${output}"
+        if [ "x${verbose}" == "xyes" ]; then
+                echo "===================================================="
+                echo "=== GStreamer 1.1 command:"
+                echo "=== $(echo $CMD | sed -e 's/\r//g')"
+                echo "===================================================="
+        fi
+	echo "{{{{{{ start video recording"
+        if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+                eval "${CMD}"
+        else
+                su pi -c "${CMD}"
+        fi
+	echo "}}}}}} end video recording"
+}
+
 
 if [ "x$action" == "xphoto" ]; then
-    GSTC="gst-launch-1.0 rkisp num-buffers=1 ${rkargs_picture} io-mode=1 path-iqf=${iqf} \
-        ! video/x-raw,format=NV12,${mode} \
-        ! jpegenc ! filesink location=${output}"
-fi
-
-if [ "x$action" == "xvideo" ]; then
-    GSTC="gst-launch-1.0 rkisp num-buffers=512 ${rkargs} io-mode=4 path-iqf=${iqf} \
-        ! video/x-raw,format=NV12,${mode} \
-        ! tee name=t t. ! queue ! ${vsnk} t. \
-        ! queue ! mpph264enc ! queue ! h264parse ! mpegtsmux \
-        ! filesink location=${output}"
-fi
-
-if [ "x${verbose}" == "xyes" ]; then
-	echo "===================================================="
-	echo "GStreamer 1.1 command:"
-	echo ${GSTC}
-	echo "===================================================="
-fi
-
-if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
-	eval "${GSTC}"
+    # start_preview
+    take_photo
+elif [ "x$action" == "xvideo" ]; then
+    # start_preview
+    start_video_recording
 else
-	su pi -c "${GSTC}"
+    start_preview
 fi
+
