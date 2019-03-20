@@ -20,6 +20,7 @@
 # ----------------------------------------------------------
 # base setup
 
+
 icam=0
 preview_mode="width=1280,height=720,framerate=30/1"
 picture_mode="width=1280,height=720,framerate=10/1"
@@ -28,14 +29,6 @@ vsnk="kmssink"
 action="preview"
 output="IMG_MIPI.jpg"
 verbose="no"
-
-sname=$(cut -d" " -f1 /sys/class/video4linux/v4l-subdev${icam}/name)
-iqf="/etc/cam_iq/${sname}.xml"
-if [ x"$sname" = x"rk-ov13850" ]; then
-	picture_mode="width=2112,height=1568,framerate=10/1"
-elif [ x"$sname" = x"rk-ov4689" ]; then
-	picture_mode="width=2668,height=1520,framerate=10/1"
-fi
 
 if [ -f /usr/bin/lxsession ]; then
 	# for FriendlyDesktop
@@ -82,6 +75,14 @@ parse_args()
 #----------------------------------------------------------
 SELF=$0
 parse_args $@
+
+sname=$(cut -d" " -f1 /sys/class/video4linux/v4l-subdev${icam}/name)
+iqf="/etc/cam_iq/${sname}.xml"
+if [ x"$sname" = x"rk-ov13850" ]; then
+	picture_mode="width=2112,height=1568,framerate=10/1"
+elif [ x"$sname" = x"rk-ov4689" ]; then
+	picture_mode="width=2668,height=1520,framerate=10/1"
+fi
 
 if [ $icam -eq 0 ]; then
 	preview_dev="/dev/video0"
