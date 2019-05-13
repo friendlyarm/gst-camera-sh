@@ -17,23 +17,19 @@
 # along with this program; if not, you can access it online at
 # http://www.gnu.org/licenses/gpl-2.0.html.
 
+#
+# Supported cameras
 # ----------------------------------------------------------
-# base setup
-
+# MCAM400 (ov4689):  https://www.friendlyarm.com/index.php?route=product/product&path=78&product_id=247
+# CAM1320 (ov13850):  https://www.friendlyarm.com/index.php?route=product/product&path=78&product_id=228
+# Logitech C920 pro webcam
+#
 
 icam=0
-preview_mode="width=1280,height=720,framerate=30/1"
-picture_mode="width=1280,height=720,framerate=10/1"
-video_mode="width=1920,height=1080,framerate=30/1"
-vsnk="kmssink"
+vsnk=
 action="preview"
-output="IMG_MIPI.jpg"
-verbose="no"
-
-if [ -f /usr/bin/lxsession ]; then
-	# for FriendlyDesktop
-	vsnk="rkximagesink"
-fi
+output=
+verbose="yes"
 
 #----------------------------------------------------------
 usage()
@@ -48,6 +44,7 @@ usage()
 	echo -e "  -v, --verbose\n\tshow full command"
 	echo -e "  -x\n\tuse rkximagesink as video render(sink)"
 	echo -e "  -k\n\tuse kmssink as video render(sink)"
+	echo -e "  -g\n\tuse glimagesink as video render(sink)"
 	exit 1
 }
 
@@ -65,66 +62,137 @@ parse_args()
 			-v|--verbose) verbose=$2; shift 2;;
 			-x ) vsnk="rkximagesink"; shift 1;;
 			-k ) vsnk="kmssink"; shift 1;;
+			-g ) vsnk="glimagesink"; shift 1;;
 			-h|--help ) usage; exit 1 ;;
 			-- ) shift; break ;;
 			*  ) echo "invalid option $1"; usage; return 1 ;;
 		esac
 	done
+
+	if [ -z "$output" ]; then
+		if [ $action = "photo" ]; then
+			output="Image_MIPI.jpg"
+		elif [ $action = "video" ]; then
+			output="Video_MIPI.ts"
+		fi
+	fi
 }
+
+
+
+isp_default_vsnk=
+usbcamera_default_vsnk=
+if [ -f /usr/bin/lxsession ]; then
+	export DISPLAY=:0.0
+	# for FriendlyDesktop
+	isp_default_vsnk="rkximagesink"
+	usbcamera_default_vsnk="glimagesink"
+else
+	# for FriendlyCore
+	isp_default_vsnk="kmssink"
+	usbcamera_default_vsnk="kmssink"
+fi
+
 
 #----------------------------------------------------------
 SELF=$0
 parse_args $@
 
-sname=$(cut -d" " -f1 /sys/class/video4linux/v4l-subdev${icam}/name)
-iqf="/etc/cam_iq/${sname}.xml"
-if [ x"$sname" = x"rk-ov13850" ]; then
-	picture_mode="width=2112,height=1568,framerate=10/1"
-elif [ x"$sname" = x"rk-ov4689" ]; then
-	picture_mode="width=2668,height=1520,framerate=10/1"
+# selfpath
+declare -a PreviewDevs=()
+# mainpath
+declare -a PictureDevs=()
+# camera type
+declare -a CameraTypes=()
+# sink
+declare -a Sinks=()
+
+# preivew format
+declare -a PreviewModes=()
+# photo format
+declare -a PictureModes=()
+# video recoard format
+declare -a VideoModes=()
+
+# isp1
+if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video1 -o \
+        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video1 ]; then
+        PreviewDevs+=("/dev/video1")
+        PictureDevs+=("/dev/video0")
+	CameraTypes+=("mipi")
+	# use did not specify sink
+	if [ -z "${vsnk}" ]; then
+		Sinks+=(${isp_default_vsnk})
+	else
+		Sinks+=(${vsnk})
+	fi
+	PreviewModes+=("width=1280,height=720,framerate=30/1")
+	PictureModes+=("width=1920,height=1080,framerate=10/1")
+	VideoModes+=("width=1280,height=720,framerate=30/1")
 fi
 
-if [ $icam -eq 0 ]; then
-	preview_dev="/dev/video0"
-	picture_dev="/dev/video2"
-	rkargs="device=${preview_dev} sensor-id=1"
-	rkargs_mainpath="device=${picture_dev} sensor-id=1"
-else
-	preview_dev="/dev/video4"
-	picture_dev="/dev/video6"
-	rkargs="device=${preview_dev} sensor-id=5"
-	rkargs_mainpath="device=${picture_dev} sensor-id=5"
+# isp2
+if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video5 -o \
+        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video5 ]; then
+        PreviewDevs+=("/dev/video5")
+        PictureDevs+=("/dev/video4")
+	CameraTypes+=("mipi")
+	# use did not specify sink
+	if [ -z "${vsnk}" ]; then
+		Sinks+=(${isp_default_vsnk})
+	else
+		Sinks+=(${vsnk})
+	fi
+	PreviewModes+=("width=1280,height=720,framerate=30/1")
+	PictureModes+=("width=1920,height=1080,framerate=10/1")
+	VideoModes+=("width=1280,height=720,framerate=30/1")
 fi
 
-if [ ! -d /sys/class/video4linux/v4l-subdev${icam} ]; then
-	echo "Error: Camera ${icam} not found"
-	exit -1
+# usb camera
+if [ -f /sys/class/video4linux/video8/name ]; then
+	# only test Logitech C920 pro
+        if [ "$( grep -i "webcam" /sys/class/video4linux/video8/name )" ]; then
+		PreviewDevs+=("/dev/video8")
+		PictureDevs+=("/dev/video8")
+		CameraTypes+=("usb")
+        fi
+	# use did not specify sink
+	if [ -z "${vsnk}" ]; then
+		Sinks+=(${usbcamera_default_vsnk})
+	else
+		Sinks+=(${vsnk})
+	fi
+	PreviewModes+=("width=640,height=480,framerate=30/1")
+	PictureModes+=("width=640,height=480,framerate=30/1")
+	VideoModes+=("width=640,height=480,framerate=30/1")
 fi
 
-if [ -c ${preview_dev} ]; then
-	echo "Start MIPI CSI Camera Preview [${preview_dev}] ..."
-else
-	echo "Error: ${preview_dev}: No such device"
-	exit -1
-fi
+rkargs="device=${PreviewDevs[$icam]}"
+rkargs_mainpath="device=${PictureDevs[$icam]}"
 
 #----------------------------------------------------------
-export DISPLAY=:0.0
-
 killall gst-launch-1.0 2>&1 > /dev/null
 sleep 1
 
 function start_preview() {
-	local CMD="gst-launch-1.0 rkisp ${rkargs} io-mode=4 path-iqf=${iqf} \
-		! video/x-raw,format=NV12,${preview_mode} \
-		! ${vsnk}"
+	local CMD=
+	if [ ${CameraTypes[$icam]} = "mipi" ]; then
+        	CMD="gst-launch-1.0 rkisp ${rkargs} io-mode=4 \
+                	! video/x-raw,format=NV12,${PreviewModes[$icam]} \
+                	! ${Sinks[$icam]}"
+	else
+		CMD="gst-launch-1.0 v4l2src ${rkargs} io-mode=4 \
+                        ! videoconvert ! video/x-raw,format=NV12,${PreviewModes[$icam]} \
+                        ! ${Sinks[$icam]}"
+	fi
+
 	if [ "x${verbose}" == "xyes" ]; then
                 echo "===================================================="
                 echo "=== GStreamer 1.1 command:"
                 echo "=== $(echo $CMD | sed -e 's/\r//g')"
                 echo "===================================================="
         fi
-	if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+	if [ ${Sinks[$icam]} = "kmssink" -o "$(id -un)" = "pi" ]; then
                 eval "${CMD}"&
         else
                 su pi -c "${CMD}"&
@@ -133,9 +201,18 @@ function start_preview() {
 }
 
 function take_photo() {
-	local CMD="gst-launch-1.0 rkisp num-buffers=20 ${rkargs_mainpath} io-mode=1 path-iqf=${iqf} \
-        	! video/x-raw,format=NV12,${picture_mode} \
+	local CMD=
+	if [ ${CameraTypes[$icam]} = "mipi" ]; then
+        	CMD="gst-launch-1.0 rkisp num-buffers=20 ${rkargs_mainpath} io-mode=1 \
+        	! video/x-raw,format=NV12,${PictureModes[$icam]} \
         	! jpegenc ! multifilesink location=\"/tmp/isp-frame%d.jpg\""
+	else
+		# usb camera only support io-mode=4
+		CMD="gst-launch-1.0 v4l2src num-buffers=1 ${rkargs_mainpath} io-mode=4 \
+        	! videoconvert ! video/x-raw,format=NV12,${PictureModes[$icam]} \
+        	! jpegenc ! filesink location=\"/tmp/usb-frame.jpg\""
+	fi
+
         if [ "x${verbose}" == "xyes" ]; then
                 echo "===================================================="
                 echo "=== GStreamer 1.1 command:"
@@ -143,22 +220,39 @@ function take_photo() {
                 echo "===================================================="
         fi
 	echo "{{{{{{ start take photo"
-        if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+        if [ ${Sinks[$icam]} = "kmssink" -o "$(id -un)" = "pi" ]; then
                 eval "${CMD}"
         else
                 su pi -c "${CMD}"
         fi
 	echo "}}}}}} end take photo"
-	if [ -f /tmp/isp-frame19.jpg ]; then
-		cp /tmp/isp-frame19.jpg ${output}
+	if [ ${CameraTypes[$icam]} = "mipi" ]; then
+		if [ -f /tmp/isp-frame19.jpg ]; then
+			cp /tmp/isp-frame19.jpg ${output}
+		fi
+	else
+		if [ -f /tmp/usb-frame.jpg ]; then
+			cp /tmp/usb-frame.jpg ${output}
+		fi
 	fi
 }
 
 function start_video_recording() {
-	local CMD="gst-launch-1.0 rkisp num-buffers=512 ${rkargs_mainpath} io-mode=1 path-iqf=${iqf} \
-        	! video/x-raw,format=NV12,${video_mode} \
+	local CMD=
+
+	if [ ${CameraTypes[$icam]} = "mipi" ]; then
+        	CMD="gst-launch-1.0 rkisp num-buffers=512 ${rkargs_mainpath} io-mode=1 \
+        	! video/x-raw,format=NV12,${VideoModes[$icam]} \
         	! mpph264enc ! queue ! h264parse ! mpegtsmux \
-        	! filesink location=${output}"
+        	! filesink location=/tmp/camera-record.ts"
+	else
+		# usb camera only support io-mode=4
+		CMD="gst-launch-1.0 v4l2src num-buffers=512 ${rkargs_mainpath} io-mode=4 \
+        	! videoconvert ! video/x-raw,format=NV12,${VideoModes[$icam]} \
+        	! mpph264enc ! queue ! h264parse ! mpegtsmux \
+        	! filesink location=/tmp/camera-record.ts"
+	fi
+
         if [ "x${verbose}" == "xyes" ]; then
                 echo "===================================================="
                 echo "=== GStreamer 1.1 command:"
@@ -166,20 +260,21 @@ function start_video_recording() {
                 echo "===================================================="
         fi
 	echo "{{{{{{ start video recording"
-        if [ $vsnk = "kmssink" -o "$(id -un)" = "pi" ]; then
+        if [ ${Sinks[$icam]} = "kmssink" -o "$(id -un)" = "pi" ]; then
                 eval "${CMD}"
         else
                 su pi -c "${CMD}"
         fi
+	if [ -f /tmp/camera-record.ts ]; then
+		cp /tmp/camera-record.ts ${output}
+	fi
 	echo "}}}}}} end video recording"
 }
 
 
 if [ "x$action" == "xphoto" ]; then
-    # start_preview
     take_photo
 elif [ "x$action" == "xvideo" ]; then
-    # start_preview
     start_video_recording
 else
     start_preview
