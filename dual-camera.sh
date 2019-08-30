@@ -52,10 +52,10 @@ if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video1 -o \
 fi
 
 # isp2
-if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video5 -o \
-        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video5 ]; then
-        PreviewDevs+=("/dev/video5")
-        PictureDevs+=("/dev/video4")
+if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video6 -o \
+        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video6 ]; then
+        PreviewDevs+=("/dev/video6")
+        PictureDevs+=("/dev/video5")
 	CameraTypes+=("mipi")
 fi
 
