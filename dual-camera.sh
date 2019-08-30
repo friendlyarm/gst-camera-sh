@@ -60,21 +60,21 @@ if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video5 -o \
 fi
 
 # usb camera 1
-if [ -f /sys/class/video4linux/video8/name ]; then
+if [ -f /sys/class/video4linux/video10/name ]; then
 	# only test Logitech C920 pro
-        if [ "$( grep -i "webcam" /sys/class/video4linux/video8/name )" ]; then
-		PreviewDevs+=("/dev/video8")
-		PictureDevs+=("/dev/video8")
+        if [ "$( grep -i "webcam" /sys/class/video4linux/video10/name )" ]; then
+		PreviewDevs+=("/dev/video10")
+		PictureDevs+=("/dev/video10")
 		CameraTypes+=("usb")
         fi
 fi
 
 # usb camera 2
-if [ -f /sys/class/video4linux/video10/name ]; then
+if [ -f /sys/class/video4linux/video12/name ]; then
         # only test Logitech C920 pro
-        if [ "$( grep -i "webcam" /sys/class/video4linux/video10/name )" ]; then
-                PreviewDevs+=("/dev/video10")
-                PictureDevs+=("/dev/video10")
+        if [ "$( grep -i "webcam" /sys/class/video4linux/video12/name )" ]; then
+                PreviewDevs+=("/dev/video12")
+                PictureDevs+=("/dev/video12")
                 CameraTypes+=("usb")
         fi
 fi
