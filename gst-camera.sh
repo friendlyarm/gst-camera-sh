@@ -115,10 +115,9 @@ declare -a PictureModes=()
 declare -a VideoModes=()
 
 # isp1
-if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video1 -o \
-        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video1 ]; then
-        PreviewDevs+=("/dev/video1")
-        PictureDevs+=("/dev/video0")
+if [ -d /sys/devices/platform/ff910000.rkisp1/video4linux/v4l-subdev2 ]; then
+    PreviewDevs+=("/dev/video1")
+    PictureDevs+=("/dev/video0")
 	CameraTypes+=("mipi")
 	# use did not specify sink
 	if [ -z "${vsnk}" ]; then
@@ -132,10 +131,10 @@ if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video1 -o \
 fi
 
 # isp2
-if [ -d /sys/class/video4linux/v4l-subdev2/device/video4linux/video6 -o \
-        -d /sys/class/video4linux/v4l-subdev5/device/video4linux/video6 ]; then
-        PreviewDevs+=("/dev/video6")
-        PictureDevs+=("/dev/video5")
+if [ -d /sys/devices/platform/ff920000.rkisp1/video4linux/v4l-subdev1 -o \
+     -d /sys/devices/platform/ff920000.rkisp1/video4linux/v4l-subdev5 ]; then
+    PreviewDevs+=("/dev/video6")
+    PictureDevs+=("/dev/video5")
 	CameraTypes+=("mipi")
 	# use did not specify sink
 	if [ -z "${vsnk}" ]; then
